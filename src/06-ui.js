@@ -67,7 +67,7 @@ const UI={
   this.terrainC={duel:tc,three:tc3,duel2:tc4};this.ready=true;
   $('load').hidden=true;$('go').disabled=false;$('go').textContent='출진';
   for(const f of facs){const c=FAC[f].color;$('h-'+f).src=iconURL('hero_'+FAC[f].show[2],c,440);FAC[f].show.forEach((k,i)=>{$('l-'+f+'-'+i).src=iconURL(k,c,120)})}
-  this.startAttract();
+  this.startAttract();Replay.fromLink();
  },
  buildTitle(){
   const fw=$('facs');
@@ -82,7 +82,7 @@ const UI={
   seg($('map'),[['duel','고지대 전선'],['duel2','협곡 회랑']],'map');
   seg($('dif'),[['easy','쉬움'],['normal','보통'],['hard','어려움']],'dif');
   this.refreshTitle();
-  $('go').onclick=()=>this.start();$('bAgain').onclick=()=>{if(this.misI!=null&&this.lastMis)Campaign.start(this.misI);else this.start()};$('bCmp').onclick=()=>Campaign.open();$('bRep').onclick=()=>Replay.start();$('bRepL').onclick=()=>Replay.startLast();Record.show();Replay.refresh();$('repB').onclick=()=>{Replay.stop();this.toTitle()};$('cmpX').onclick=()=>{$('cmp').hidden=true};$('bNet').onclick=()=>Net.open();$('netX').onclick=()=>Net.hide();$('netMk').onclick=()=>Net.make();$('netJ').onclick=()=>Net.enter($('netC').value,false);$('netGo').onclick=()=>Net.go();Net.init();
+  $('go').onclick=()=>this.start();$('bAgain').onclick=()=>{if(this.misI!=null&&this.lastMis)Campaign.start(this.misI);else this.start()};$('bCmp').onclick=()=>Campaign.open();$('bRep').onclick=()=>Replay.start();$('bRepL').onclick=()=>Replay.startLast();Record.show();Replay.refresh();$('repB').onclick=()=>{Replay.stop();this.toTitle()};$('cmpX').onclick=()=>{$('cmp').hidden=true};$('bNet').onclick=()=>Net.open();$('netX').onclick=()=>Net.hide();$('netMk').onclick=()=>Net.make();$('netJ').onclick=()=>Net.enter($('netC').value,false);$('netGo').onclick=()=>Net.go();$('netQ').onclick=()=>Net.quickMatch();$('netPub').onclick=()=>{Net.saveNick();Net.make({pub:true})};$('bRank').onclick=()=>Rank.open();$('rankX').onclick=()=>{$('rank').hidden=true};$('bShare').onclick=()=>Replay.share();Net.init();
   $('bHome').onclick=()=>{this.lastMis=false;this.toTitle()};$('bQuit').onclick=()=>this.toTitle();
   $('bResume').onclick=()=>this.setPause(false);
   $('bGiveup').onclick=()=>{this.setPause(false);this.g.concede(ME)};
@@ -498,13 +498,13 @@ const UI={
   w.append(chart('병력 가치',0),chart('누적 채취 자원',1));
  },
  gameOver(){
-  this.overDone=true;const g=this.g,win=g.winner===ME,m=Math.floor(g.tick/TPS);
-  $('overT').textContent=win?'승리':'패배';$('overT').style.color=win?g.p[ME].color:'#ff8a8a';
+  this.overDone=true;const g=this.g,obs=Replay.on||Net.spec,win=g.winner===ME,m=Math.floor(g.tick/TPS);
+  $('overT').textContent=obs?FAC[g.p[g.winner].fac].name+' 승리':win?'승리':'패배';$('overT').style.color=obs?g.p[g.winner].color:win?g.p[ME].color:'#ff8a8a';
   {const w=g.p[g.winner],c0=w.color,hk='hero_'+FAC[w.fac].show[2];$('overHero').src=(this.use3D||Sprites.get(hk,c0))?iconURL(hk,c0,420):'';if(!$('overHero').getAttribute('src'))$('overHero').removeAttribute('src')}
   $('overS').textContent=`${g.p.map(q=>FAC[q.fac].name).join(' 대 ')} · ${Math.floor(m/60)}분 ${m%60}초`;
   const row=(n,f)=>`<tr><th>${n}</th>${g.p.map(q=>`<td>${f(q)}</td>`).join('')}</tr>`;
-  $('overTb').innerHTML=`<tr><th></th>${g.p.map((q,i)=>`<td style="color:${q.color}">${i===0?'나':FAC[q.fac].name}</td>`).join('')}</tr>`+row('생산 유닛',q=>q.stats.made)+row('격파',q=>q.stats.killed)+row('손실',q=>q.stats.lost)+row('채취 자원',q=>q.stats.gathered);
- this.drawTrend(g);if(!Replay.on&&!this.mis&&!Net.on&&this.rec){Record.add(g.winner===ME);Replay.save()}$('bRep').hidden=!this.rec||Replay.on;$('repB').hidden=true;
+  $('overTb').innerHTML=`<tr><th></th>${g.p.map((q,i)=>`<td style="color:${q.color}">${i===0&&!obs?'나':FAC[q.fac].name}</td>`).join('')}</tr>`+row('생산 유닛',q=>q.stats.made)+row('격파',q=>q.stats.killed)+row('손실',q=>q.stats.lost)+row('채취 자원',q=>q.stats.gathered);
+ this.drawTrend(g);if(!Replay.on&&!this.mis&&!Net.on&&this.rec){Record.add(g.winner===ME);Replay.save()}if(Net.on&&!Net.spec&&this.rec)Replay.save();$('bRep').hidden=!this.rec||Replay.on;$('bShare').hidden=!this.rec||Replay.on||Net.base!==WSRoom;$('shareL').hidden=true;$('repB').hidden=true;
   $('over').hidden=false;$('hint').hidden=true;
  }
 };

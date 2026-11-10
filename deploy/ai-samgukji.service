@@ -2,12 +2,16 @@
 # 설치: sudo cp deploy/ai-samgukji.service /etc/systemd/system/ && sudo systemctl enable --now ai-samgukji
 [Unit]
 Description=AI Samgukji game server
-After=network.target
+After=network.target postgresql.service
+# DB가 내려가도 게임 페이지와 대전 중계는 계속 동작하므로 Requires가 아니라 Wants로 둔다
+Wants=postgresql.service
 
 [Service]
 WorkingDirectory=/opt/ai-samgukji
 ExecStart=/usr/bin/node server/server.js
 Environment=PORT=8080 NODE_ENV=production
+# Unix 소켓 peer 인증: 비밀번호 없이 서비스 계정 이름으로 접속한다
+Environment=PGHOST=/var/run/postgresql PGUSER=ai-samgukji PGDATABASE=ai_samgukji
 Restart=on-failure
 User=ai-samgukji
 NoNewPrivileges=true

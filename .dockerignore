@@ -3,3 +3,4 @@ dist
 server/node_modules
 tools/__pycache__
 *.log
+release.tgz

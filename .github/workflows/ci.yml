@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: 문법 검사
+        run: |
+          for f in src/0*.js server/*.js tools/balance.js; do
+            case "$f" in *05y-pack.js) ;; *) node --check "$f" ;; esac
+          done
+      - name: 의존성 설치
+        run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+        working-directory: server
+      - name: 릴리스 묶음 생성
+        run: sh deploy/release.sh
+      - name: 서버 기동 시험
+        run: |
+          PORT=18080 node server/server.js &
+          pid=$!
+          for i in $(seq 1 30); do
+            [ "$(curl -s -m 2 http://127.0.0.1:18080/healthz || true)" = ok ] && break
+            sleep 1
+          done
+          [ "$(curl -s -m 2 http://127.0.0.1:18080/healthz)" = ok ]
+          curl -sf -o /dev/null http://127.0.0.1:18080/
+          curl -sf -o /dev/null http://127.0.0.1:18080/vendor/three-0.128.0/build/three.min.js
+          kill "$pid"
+      - name: 시뮬레이션 시험
+        run: node tools/balance.js 2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: release.tgz
+          retention-days: 7
+
+  # 저장소 변수 DEPLOY_ENABLED=true와 비밀값을 설정해야 실행된다(README 참고)
+  deploy:
+    needs: check
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    concurrency: deploy
+    environment: production
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+      - name: VM에 배포
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          PORT: ${{ secrets.DEPLOY_PORT }}
+          USER_NAME: ${{ secrets.DEPLOY_USER }}
+          KEY: ${{ secrets.DEPLOY_KEY }}
+          KNOWN: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy; chmod 600 ~/.ssh/deploy
+          printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts
+          R="/tmp/ai-samgukji-release-$GITHUB_SHA.tgz"
+          scp -i ~/.ssh/deploy -P "$PORT" release.tgz "$USER_NAME@$HOST:$R"
+          ssh -i ~/.ssh/deploy -p "$PORT" "$USER_NAME@$HOST" "sudo /usr/local/sbin/ai-samgukji-deploy $R; rc=\$?; rm -f $R; exit \$rc"

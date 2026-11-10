@@ -4,6 +4,6 @@ cd "$(dirname "$0")"
 mkdir -p dist
 { cat src/00-head.html; echo '<script>'; cat src/0[1-9]*.js; echo '</script>'; } > dist/ai-samgukji.html
 # 자체 서버 배포용: 문서 골격을 갖춘 index.html (three.js는 CDN 대신 서버에서 제공)
-{ printf '%s' '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0;font:14px system-ui;background:#05080c}[hidden]{display:none!important}</style></head><body>'; sed 's#https://cdn.jsdelivr.net/npm/three@0.128.0/#/vendor/three-0.128.0/#g' dist/ai-samgukji.html; printf '%s' '</body></html>'; } > dist/index.html
-rm -rf dist/vendor && cp -R vendor dist/vendor
+{ printf '%s' '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><link rel="icon" href="/favicon.ico" sizes="32x32"><link rel="icon" type="image/svg+xml" href="/icons/icon.svg"><link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"><link rel="manifest" href="/icons/manifest.webmanifest"><meta name="theme-color" content="#0a1118"><style>body{margin:0;font:14px system-ui;background:#05080c}[hidden]{display:none!important}</style></head><body>'; sed 's#https://cdn.jsdelivr.net/npm/three@0.128.0/#/vendor/three-0.128.0/#g' dist/ai-samgukji.html; printf '%s' '</body></html>'; } > dist/index.html
+rm -rf dist/vendor dist/icons && cp -R vendor dist/vendor && cp -R icons dist/icons
 wc -c dist/ai-samgukji.html dist/index.html
