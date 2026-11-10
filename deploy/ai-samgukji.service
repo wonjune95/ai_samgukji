@@ -1,0 +1,18 @@
+# systemd 서비스 예시 (Docker 없이 Node.js로 직접 실행할 때)
+# 설치: sudo cp deploy/ai-samgukji.service /etc/systemd/system/ && sudo systemctl enable --now ai-samgukji
+[Unit]
+Description=AI Samgukji game server
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/ai-samgukji
+ExecStart=/usr/bin/node server/server.js
+Environment=PORT=8080 NODE_ENV=production
+Restart=on-failure
+User=www-data
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadOnlyPaths=/opt/ai-samgukji
+
+[Install]
+WantedBy=multi-user.target
