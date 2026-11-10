@@ -6,7 +6,7 @@
 - ChatGPT·Gemini·Claude 세 진영의 브라우저 3D 실시간 전략 게임. 단일 HTML로 빌드됨.
 - 진영 역할: ChatGPT(고가·보호막 정예), Gemini(모드 전환 공장·수리), Claude(2기 생산·맥락 지대·재생).
 - 시뮬레이션: 고정 스텝 30TPS, 타일 32px, 76×76 맵, 시드 난수, 결정론적(같은 입력 → 같은 결과). 리플레이와 온라인 락스텝이 이 성질에 의존하므로 **시뮬레이션에 `Math.random()`이나 시간 의존 코드를 넣지 말 것**(`g.rng()` 사용).
-- 렌더링: three.js r128(jsDelivr 전역 빌드). WebGL이 없거나 CDN이 막히면 2D 렌더러로 대체.
+- 렌더링: three.js r128 전역 빌드(`dist/index.html`은 `vendor/`를 서버에서 제공, `dist/ai-samgukji.html`은 jsDelivr). WebGL이 없거나 스크립트를 못 받으면 2D 렌더러로 대체.
 
 ## 구조
 | 경로 | 내용 |
@@ -22,6 +22,7 @@
 | `src/05zz-net.js` | 온라인 대전(`Net`, 락스텝), `WSRoom`(자체 서버 중계), `Replay`, `Record`, 캠페인 |
 | `src/06-ui.js` | UI, 입력, HUD, 타이틀 |
 | `server/server.js` | 페이지 제공 + `/ws` 중계 + `/healthz` |
+| `vendor/` | three.js r128 원본 파일(npm 패키지 그대로). 직접 편집 금지 |
 | `tools/` | 3D 모델 생성기: `dump.js` → `gen.py`(designs.py 디자인 사용) → `pack.py` |
 
 ## 빌드와 실행
@@ -30,6 +31,8 @@ sh build.sh                          # dist/index.html(자체 서버용), dist/a
 cd server && npm ci --omit=dev && cd ..
 PORT=8080 node server/server.js
 ```
+
+운영 VM은 systemd 서비스 `ai-samgukji`로 `/opt/ai-samgukji`에서 실행합니다(`deploy/ai-samgukji.service`). 저장소에서 빌드한 뒤 `dist/`와 `server/server.js`를 `/opt`로 복사해야 반영됩니다.
 
 ## 검증 방법(변경 후 반드시 실행)
 1. 문법: `for f in src/0*.js; do node --check $f; done` (05y-pack.js 제외 가능)
@@ -47,13 +50,13 @@ PORT=8080 node server/server.js
 - 스타크래프트의 유닛 디자인, 그래픽, 음성, 이름, 코드를 복제하지 않는다. 장르 관례만 사용한다.
 - 각 회사의 로고나 상표 이미지를 쓰지 않는다(독자 문양만). 비제휴 문구를 유지한다.
 - 온라인 메시지는 신뢰하지 않는 입력으로 취급한다(`Net.exec`의 검증 유지, 서버의 크기·빈도 제한 유지).
-- 프로토콜이 바뀌면 `05zz-net.js`의 `NET_V`를 올린다(구버전 리플레이·대전 혼선 방지).
+- 프로토콜이 바뀌면 `05zz-net.js`의 `NET_V`를 올린다(구버전 리플레이·대전 혼선 방지). `TURN`·`DELAY`는 자체 서버 연결에서 4·2, claude.ai room에서 6·3이다.
 
 ## 알려진 문제와 다음 작업
 - `duel2`(협곡 회랑) 지도에서 ChatGPT 승률이 높음(약 63%). 공정한 대전은 `duel` 권장.
 - 신규 고급 유닛(정렬 창기병 등 9종)의 개별 강약은 측정되지 않음.
 - 실제 GPU 프레임 속도, 휴대폰 터치, 사운드는 미검증.
-- 다음 후보: 로비(열린 방 목록·빠른 대전), three.js·글꼴 자체 제공, 서버 저장 전적·순위표(SQLite), 리플레이 링크 공유, GitHub Actions 자동 배포, 관전, `/metrics`.
+- 다음 후보: 로비(열린 방 목록·빠른 대전), 글꼴 자체 제공, 서버 저장 전적·순위표(PostgreSQL), 리플레이 링크 공유, GitHub Actions 자동 배포(SSH로 `/opt` 배포), 관전. Prometheus(`/metrics`)는 하지 않는다.
 
 ## 응답 방식(사용자 요청)
 - 한국어 문어체, 건조하고 전문적인 어조. 구조: 핵심 요약 → 상세 설명 → 근거 및 출처.

@@ -3,6 +3,7 @@ FROM node:20-alpine AS build
 WORKDIR /src
 COPY build.sh ./
 COPY src ./src
+COPY vendor ./vendor
 RUN sh build.sh
 
 FROM node:20-alpine
@@ -11,6 +12,7 @@ COPY server/package.json server/package-lock.json ./server/
 RUN cd server && npm ci --omit=dev && npm cache clean --force
 COPY server/server.js ./server/
 COPY --from=build /src/dist/index.html ./dist/index.html
+COPY --from=build /src/dist/vendor ./dist/vendor
 ENV PORT=8080 NODE_ENV=production
 EXPOSE 8080
 USER node

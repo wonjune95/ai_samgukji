@@ -4,26 +4,71 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
+const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 
 const PORT = Number(process.env.PORT || 8080);
 const PAGE = process.env.PAGE || path.join(__dirname, '..', 'dist', 'index.html');
+const VENDOR = process.env.VENDOR || path.join(__dirname, '..', 'dist', 'vendor');
 const MAX_ROOMS = Number(process.env.MAX_ROOMS || 500);
 const MAX_PEERS = 8;            // 방 하나당 최대 접속 수
 const MAX_PRESENCE = 4096;      // presence JSON 최대 길이
 const MAX_MSG_PER_SEC = 60;     // 연결당 초당 메시지 상한
 const ROOM_RE = /^aisg-[a-z0-9]{3,8}$/;
 
-let page = fs.readFileSync(PAGE);
-fs.watchFile(PAGE, { interval: 5000 }, () => { try { page = fs.readFileSync(PAGE); } catch (e) {} });
+// 응답 본문은 원본·gzip·ETag를 미리 준비한다(페이지가 약 10MB라 요청마다 압축하지 않는다)
+const GZIP = { level: 9 };
+const pack = (raw, gz) => {
+  const tag = crypto.createHash('sha256').update(raw).digest('hex').slice(0, 32);
+  return { raw, gz, etag: `"${tag}"`, etagGz: `"${tag}-gz"` };
+};
+const packSync = (raw) => pack(raw, zlib.gzipSync(raw, GZIP));
+
+let page = packSync(fs.readFileSync(PAGE));
+fs.watchFile(PAGE, { interval: 5000 }, () => {
+  fs.readFile(PAGE, (err, raw) => {
+    if (err) return;
+    zlib.gzip(raw, GZIP, (e, gz) => { if (!e) page = pack(raw, gz); });
+  });
+});
+
+// dist/vendor 아래 파일만 정확한 경로로 제공한다(경로에 버전이 있어 장기 캐시 가능)
+const vendor = new Map();
+const walk = (dir, base) => {
+  let list; try { list = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }
+  for (const d of list) {
+    const f = path.join(dir, d.name), u = `${base}/${d.name}`;
+    if (d.isDirectory()) walk(f, u);
+    else if (d.isFile()) vendor.set(u, packSync(fs.readFileSync(f)));
+  }
+};
+walk(VENDOR, '/vendor');
+
+const wantsGzip = (h) => String(h || '').split(',').some((s) => {
+  const [enc, ...opts] = s.trim().toLowerCase().split(';');
+  if (enc.trim() !== 'gzip') return false;
+  const q = opts.map((o) => o.trim()).find((o) => o.startsWith('q='));
+  return !q || Number(q.slice(2)) > 0;
+});
+const etagMatches = (h, etag) => !!h && (h.trim() === '*' || h.split(',').some((t) => t.trim().replace(/^W\//, '') === etag));
+const sendAsset = (req, res, a, type, cache) => {
+  const gz = wantsGzip(req.headers['accept-encoding']);
+  const etag = gz ? a.etagGz : a.etag;
+  const head = { 'content-type': type, 'cache-control': cache, etag, vary: 'Accept-Encoding', 'x-content-type-options': 'nosniff' };
+  if (etagMatches(req.headers['if-none-match'], etag)) { res.writeHead(304, head); return res.end(); }
+  const body = gz ? a.gz : a.raw;
+  if (gz) head['content-encoding'] = 'gzip';
+  head['content-length'] = body.length;
+  res.writeHead(200, head); res.end(body);
+};
 
 const server = http.createServer((req, res) => {
   const url = (req.url || '/').split('?')[0];
   if (url === '/healthz') { res.writeHead(200, { 'content-type': 'text/plain' }); return res.end('ok'); }
-  if (url === '/' || url === '/index.html') {
-    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache', 'x-content-type-options': 'nosniff' });
-    return res.end(page);
-  }
+  if (url === '/' || url === '/index.html') return sendAsset(req, res, page, 'text/html; charset=utf-8', 'no-cache');
+  const asset = vendor.get(url);
+  if (asset) return sendAsset(req, res, asset, url.endsWith('.js') ? 'text/javascript; charset=utf-8' : 'text/plain; charset=utf-8', 'public, max-age=31536000, immutable');
   res.writeHead(404, { 'content-type': 'text/plain' }); res.end('not found');
 });
 

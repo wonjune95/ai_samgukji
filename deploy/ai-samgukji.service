@@ -9,7 +9,7 @@ WorkingDirectory=/opt/ai-samgukji
 ExecStart=/usr/bin/node server/server.js
 Environment=PORT=8080 NODE_ENV=production
 Restart=on-failure
-User=www-data
+User=ai-samgukji
 NoNewPrivileges=true
 ProtectSystem=strict
 ReadOnlyPaths=/opt/ai-samgukji

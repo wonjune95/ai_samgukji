@@ -40,14 +40,23 @@ PORT=8080 node server/server.js
 - **HTTPS 권장**: `deploy/nginx.conf` 처럼 역방향 프록시에서 TLS를 종료하고, `/ws` 경로에 WebSocket Upgrade 헤더를 넘겨야 합니다.
 - **단일 인스턴스**: 방 정보는 서버 메모리에만 있으므로 여러 대로 늘리면 같은 방 참가자가 서로 다른 서버에 붙을 수 있습니다. 확장하려면 세션 고정(sticky session)이 필요합니다.
 - **인증 없음**: 방 코드를 아는 사람은 누구나 참가할 수 있습니다.
-- **외부 리소스**: 플레이어 브라우저가 `cdn.jsdelivr.net`(three.js)과 Google Fonts에 접속할 수 있어야 3D 화면이 나옵니다. 접속이 막히면 2D 화면으로 실행됩니다.
-- **페이지 크기**: 약 10MB(gzip 시 약 7MB). 첫 접속이 느릴 수 있습니다.
+- **외부 리소스**: three.js는 이 서버의 `/vendor/`에서 제공합니다. 글꼴은 Google Fonts를 사용합니다(접속이 막히면 시스템 글꼴로 표시).
+- **페이지 크기**: 약 10MB(서버가 gzip으로 약 7.4MB 전송, 재방문은 ETag로 304 응답). 첫 접속이 느릴 수 있습니다.
 
 ## 소스 수정 후 갱신
 
 ```bash
 sh build.sh                      # dist/ 다시 생성
 docker build -t ai-samgukji . && docker rm -f ai-samgukji && docker run -d --name ai-samgukji -p 8080:8080 ai-samgukji
+```
+
+systemd로 직접 실행 중이라면:
+
+```bash
+sh build.sh
+sudo cp -R dist/index.html dist/vendor /opt/ai-samgukji/dist/
+sudo cp server/server.js /opt/ai-samgukji/server/
+sudo systemctl restart ai-samgukji
 ```
 
 ## 3D 모델 다시 만들기(선택)

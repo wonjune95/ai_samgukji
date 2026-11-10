@@ -1,5 +1,7 @@
 // 온라인 대전: 게시 페이지의 room 기능 위에서 명령만 주고받는 락스텝 동기화
-const NET_V='aisg10',TURN=6,DELAY=3,NET_CMDS=new Set(['cmdMove','cmdPatrol','cmdAttack','cmdHold','cmdStop','cmdGather','cmdRepair','cmdSkill','cmdBuild','train','research','cancelQ','cancelBuild','setMode','castAbility','propose','betray','concede','setRally']);
+// TURN·DELAY: 자체 서버 연결에서는 Net.init이 더 짧은 값으로 바꾼다(claude.ai room은 전송 빈도 제한을 알 수 없어 기본값 유지)
+let TURN=6,DELAY=3;
+const NET_V='aisg11',NET_CMDS=new Set(['cmdMove','cmdPatrol','cmdAttack','cmdHold','cmdStop','cmdGather','cmdRepair','cmdSkill','cmdBuild','train','research','cancelQ','cancelBuild','setMode','castAbility','propose','betray','concede','setRally']);
 const NET_RET={train:'ok',research:'ok',castAbility:true,propose:'ok',cmdBuild:true};
 // 자체 서버용 중계 연결: claude.ai room과 같은 방식(presence·peers)으로 동작한다
 const WSRoom={
@@ -33,13 +35,13 @@ const Net={
   try{if(window.claude&&window.claude.use){const r=await window.claude.use('room');if(r){this.base=r;this.avail=true;$('bNet').hidden=false;return}}}catch(e){}
   // claude.ai 밖(자체 서버)에서는 같은 주소의 /ws 중계 서버를 쓴다
   if(!/^https?:$/.test(location.protocol))return;
-  if(await WSRoom.probe()){this.base=WSRoom;this.avail=true;$('bNet').hidden=false}
+  if(await WSRoom.probe()){this.base=WSRoom;this.avail=true;TURN=4;DELAY=2;$('bNet').hidden=false}
  },
  close(){if(this.room){try{this.room.leave()}catch(e){}}this.room=null;this.on=false;if(this.unsub){this.unsub();this.unsub=null}},
  esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))},
  open(){$('net').hidden=false;$('netL').hidden=false;$('netR').hidden=true;$('netE').textContent='';$('netC').value=''},
  hide(){$('net').hidden=true;if(!this.on)this.close()},
- async make(){const c='abcdefghjkmnpqrstuvwxyz23456789';let code='';for(let i=0;i<4;i++)code+=c[Math.floor(Math.random()*c.length)];await this.enter(code,true)},
+ async make(){const c='abcdefghjkmnpqrstuvwxyz23456789';let code='';for(const b of crypto.getRandomValues(new Uint8Array(6)))code+=c[b%c.length];await this.enter(code,true)},
  async enter(code,host){
   code=String(code||'').trim().toLowerCase();if(!/^[a-z0-9]{3,8}$/.test(code)){$('netE').textContent='방 코드를 확인하십시오.';return}
   try{this.close();this.room=await this.base.join('aisg-'+code)}catch(e){$('netE').textContent='방에 들어갈 수 없습니다. 잠시 후 다시 시도하십시오.';return}
