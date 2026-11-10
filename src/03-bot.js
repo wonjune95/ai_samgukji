@@ -105,18 +105,18 @@ class Bot{
   }
  }
  produce(bars){
-  const g=this.g,{p}=this.ctx,hasTech=this.ctx.has('tech');
+  const g=this.g,{p}=this.ctx,hasTech=this.ctx.has('tech'),hasAdv=this.ctx.has('adv');
   let ea=0,ev2=0;for(const u of g.units){if(!g.hostile(this.pid,u.p)||u.def.worker)continue;const v=u.def.c+u.def.d*1.5;ev2+=v;if(u.air)ev2,ea+=v}
   const antiAir=ev2>0&&ea/ev2>.32;
   bars.forEach((b,i)=>{
    if(b.q.length>=1)return;
    let order;
-   if(this.fac==='gpt')order=hasTech?['gpt_tf','gpt_ship','gpt_arch','gpt_guard']:['gpt_arch','gpt_guard'];
-   if(this.fac==='cla')order=hasTech?['cla_beast','cla_spore','cla_spine','cla_swarm']:['cla_spine','cla_swarm'];
+   if(this.fac==='gpt')order=hasAdv?['gpt_tf','gpt_lance','gpt_arch','gpt_guard']:hasTech?['gpt_lance','gpt_arch','gpt_guard']:['gpt_guard'];
+   if(this.fac==='cla')order=hasAdv?['cla_beast','cla_spore','cla_spine','cla_swarm']:hasTech?['cla_acid','cla_spine','cla_swarm']:['cla_swarm'];
    if(this.fac==='gem'){
-    let want=hasTech?['mech','inf','air'][i%3]:'inf';if(antiAir&&want==='mech')want='inf';
+    let want=hasTech?['mech','inf',hasAdv?'air':'mech'][i%3]:'inf';if(antiAir&&want==='mech')want='inf';
     if(b.mode!==want){g.setMode(b,want);return}
-    order=want==='mech'?['gem_audio']:want==='air'?['gem_drone']:['gem_vision','gem_text'];
+    order=want==='mech'?['gem_audio']:want==='air'?['gem_drone']:hasTech?['gem_vision','gem_text']:['gem_text'];
    }
    if(hasTech)for(const [k,cap] of ({gpt:[['gpt_ram',3],['gpt_heal',3]],gem:[['gem_how',3],['gem_heal',3]],cla:[['cla_acid',4],['cla_heal',3]]})[this.fac]){if(UNIT[k].mode&&UNIT[k].mode!==b.mode)continue;if(this.ctx.army.filter(u=>u.def.key===k).length<cap&&g.rng()<.28)order=[k,...order]}
    if(antiAir){const f=order.filter(k=>!UNIT[k].noAir);if(f.length)order=f}
@@ -126,7 +126,7 @@ class Bot{
    for(const k of seq){if(g.train(b,k)==='ok')break}
   });
   for(const b of this.ctx.advs){
-   if(b.q.length>=1)continue;const A={gpt:[['gpt_lance','gpt_ark'],'gpt_wing'],gem:[['gem_mech','gem_bomb'],'gem_aa'],cla:[['cla_brood','cla_wing'],'cla_leech']}[this.fac];
+   if(b.q.length>=1)continue;const A={gpt:[['gpt_ship','gpt_ark'],'gpt_wing'],gem:[['gem_mech','gem_bomb'],'gem_aa'],cla:[['cla_brood','cla_wing'],'cla_leech']}[this.fac];
    const ea2=g.units.filter(u=>u.air&&g.hostile(this.pid,u.p)).length;let order=A[0].slice();if(antiAir||ea2>3)order=[A[1],...order];if(g.rng()<.5)order.reverse();
    for(const k of order){if(g.train(b,k)==='ok')break}
   }

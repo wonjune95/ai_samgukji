@@ -245,7 +245,8 @@ wss.on('connection', (ws) => {
     let m; try { m = JSON.parse(raw); } catch (e) { return; }
     if (!m || typeof m !== 'object') return;
     // presence는 최신 값이 이전 값을 대신하므로 과도하면 버린다(입장·퇴장은 항상 처리)
-    if (++count > MAX_MSG_PER_SEC && m.t === 'pres') return;
+    if (++count > MAX_MSG_PER_SEC && (m.t === 'pres' || m.t === 'ping')) return;
+    if (m.t === 'ping') { if (typeof m.n === 'number') send(ws, { t: 'pong', n: m.n }); return; }
 
     if (m.t === 'spec') {
       if (roomName || specOf || typeof m.room !== 'string' || !ROOM_RE.test(m.room)) return send(ws, { t: 'error', msg: 'bad room' });

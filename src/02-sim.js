@@ -321,6 +321,7 @@ class Game{
  train(b,key){
   const p=this.p[b.p],d=UNIT[key],sup=d.sup*(d.count||1);
   if(!b.built||b.q.length>=5)return 'queue';
+  if(!(b.def.modes?Object.values(b.def.modes).some(l=>l.includes(key)):(b.def.trains||[]).includes(key)))return 'req';
   if(!this.reqMet(b.p,d))return 'req';
   if(d.mode&&b.mode!==d.mode)return 'mode';
   if(b.modeT>0)return 'mode';

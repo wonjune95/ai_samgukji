@@ -1,7 +1,7 @@
 // 온라인 대전: 게시 페이지의 room 기능 위에서 명령만 주고받는 락스텝 동기화
-// TURN·DELAY: 자체 서버 연결에서는 Net.init이 더 짧은 값으로 바꾼다(claude.ai room은 전송 빈도 제한을 알 수 없어 기본값 유지)
+// TURN·DELAY: 자체 서버 연결에서는 Net.init이 더 짧은 값으로 바꾸고, 입력 지연은 왕복 시간에 맞춰 DELAY 이상으로 조절한다(claude.ai room은 전송 빈도 제한을 알 수 없어 기본값 고정)
 let TURN=6,DELAY=3;
-const NET_V='aisg12',NET_CMDS=new Set(['cmdMove','cmdPatrol','cmdAttack','cmdHold','cmdStop','cmdGather','cmdRepair','cmdSkill','cmdBuild','train','research','cancelQ','cancelBuild','setMode','castAbility','propose','betray','concede','setRally']);
+const NET_V='aisg13',NET_CMDS=new Set(['cmdMove','cmdPatrol','cmdAttack','cmdHold','cmdStop','cmdGather','cmdRepair','cmdSkill','cmdBuild','train','research','cancelQ','cancelBuild','setMode','castAbility','propose','betray','concede','setRally']);
 const NET_RET={train:'ok',research:'ok',castAbility:true,propose:'ok',cmdBuild:true};
 // 온라인 명령·공유 리플레이의 인수 검증(둘 다 신뢰하지 않는 입력)
 const cmdOk=(name,a)=>!((name==='train'&&!Object.prototype.hasOwnProperty.call(UNIT,a[1]))||(name==='cmdBuild'&&!Object.prototype.hasOwnProperty.call(BLD,a[1]))||(name==='setMode'&&!['inf','mech','air'].includes(a[1]))||(name==='research'&&!['atk','arm'].includes(a[1]))||(name==='setRally'&&a[0].length===0));
@@ -17,21 +17,22 @@ const WSRoom={
  probe(){return new Promise(res=>{let done=false;try{const w=new WebSocket(this.url());const end=v=>{if(done)return;done=true;try{w.close()}catch(e){}res(v)};w.onmessage=e=>{try{if(JSON.parse(e.data).t==='hello')end(true)}catch(x){}};w.onerror=()=>end(false);setTimeout(()=>end(false),3500)}catch(e){res(false)}})},
  join(name){
   return new Promise((resolve,reject)=>{
-   const peers=new Map();let me=null,mine={},hs=[],errs=[],ws=null,open=false,closed=false,first=true,tries=0;
+   const peers=new Map();let me=null,mine={},hs=[],errs=[],ws=null,open=false,closed=false,first=true,tries=0,rtts=[],pingT=0;
    const view=()=>[...peers].map(([id,pr])=>({peer:id,isMe:id===me,sameTab:id===me,kind:'viewer',guest:false,by:null,presence:pr,updatedAt:Date.now()}));
    const fire=(j,l,u)=>{const P=view(),f=ids=>P.filter(p=>ids.includes(p.peer)),left=l.map(id=>({peer:id,isMe:false,sameTab:false,kind:'viewer',presence:{}}));for(const h of hs)try{h({peers:P,joined:f(j),left,updated:f(u)})}catch(e){}};
    const room={name,
     presence(patch){for(const k in patch){if(patch[k]===null)delete mine[k];else mine[k]=patch[k]}const s=JSON.stringify(mine);if(s.length>4096)return Promise.reject({code:'invalid_argument'});if(me){peers.set(me,JSON.parse(s));setTimeout(()=>fire([],[],[me]),0)}if(open)ws.send(JSON.stringify({t:'pres',p:mine}));return Promise.resolve()},
     peers:view,onPeers(h,onErr){hs.push(h);if(onErr)errs.push(onErr);setTimeout(()=>{const P=view();h({peers:P,joined:P,left:[],updated:[]})},0);return()=>{hs=hs.filter(x=>x!==h)}},
-    connected:()=>open,report(m){if(open)ws.send(JSON.stringify(m))},async leave(){closed=true;try{ws.send(JSON.stringify({t:'leave'}));ws.close()}catch(e){}}};
+    connected:()=>open,rtt:()=>rtts.length?Math.max(...rtts):0,report(m){if(open)ws.send(JSON.stringify(m))},async leave(){closed=true;try{ws.send(JSON.stringify({t:'leave'}));ws.close()}catch(e){}}};
    const connect=()=>{ws=new WebSocket(this.url());
-    ws.onopen=()=>ws.send(JSON.stringify({t:'join',room:name,peer:me,tok:Ident.tok(),nick:Ident.nick()}));
+    ws.onopen=()=>{ws.send(JSON.stringify({t:'join',room:name,peer:me,tok:Ident.tok(),nick:Ident.nick()}));const ping=()=>{if(ws.readyState===1)ws.send(JSON.stringify({t:'ping',n:performance.now()}))};clearInterval(pingT);ping();pingT=setInterval(ping,1000)};
     ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(x){return}
-     if(m.t==='joined'){me=m.peer;open=true;tries=0;const old=new Set(peers.keys());peers.clear();for(const p of m.peers)peers.set(p.peer,p.presence||{});peers.set(me,{...mine});if(Object.keys(mine).length)ws.send(JSON.stringify({t:'pres',p:mine}));const gone=[...old].filter(id=>!peers.has(id));fire([],gone,[...peers.keys()]);if(first){first=false;resolve(room)}}
+     if(m.t==='pong'){if(typeof m.n==='number'){rtts.push(performance.now()-m.n);if(rtts.length>6)rtts.shift()}}
+     else if(m.t==='joined'){me=m.peer;open=true;tries=0;const old=new Set(peers.keys());peers.clear();for(const p of m.peers)peers.set(p.peer,p.presence||{});peers.set(me,{...mine});if(Object.keys(mine).length)ws.send(JSON.stringify({t:'pres',p:mine}));const gone=[...old].filter(id=>!peers.has(id));fire([],gone,[...peers.keys()]);if(first){first=false;resolve(room)}}
      else if(m.t==='pres'){const n=!peers.has(m.peer);peers.set(m.peer,m.p||{});fire(n?[m.peer]:[],[],n?[]:[m.peer])}
      else if(m.t==='left'){if(peers.delete(m.peer))fire([],[m.peer],[])}
      else if(m.t==='error'&&first){first=false;reject(new Error(m.msg||'join'))}};
-    ws.onclose=()=>{open=false;if(closed)return;if(first){first=false;reject(new Error('closed'));return}if(++tries<=20)setTimeout(connect,Math.min(4000,500*tries));else for(const f of errs)try{f()}catch(e){}};
+    ws.onclose=()=>{open=false;clearInterval(pingT);if(closed)return;if(first){first=false;reject(new Error('closed'));return}if(++tries<=20)setTimeout(connect,Math.min(4000,500*tries));else for(const f of errs)try{f()}catch(e){}};
    };
    connect();
   });
@@ -43,7 +44,7 @@ const Net={
   try{if(window.claude&&window.claude.use){const r=await window.claude.use('room');if(r){this.base=r;this.avail=true;$('bNet').hidden=false;return}}}catch(e){}
   // claude.ai 밖(자체 서버)에서는 같은 주소의 /ws 중계 서버를 쓴다
   if(!/^https?:$/.test(location.protocol))return;
-  if(await WSRoom.probe()){this.base=WSRoom;this.avail=true;TURN=4;DELAY=2;$('bNet').hidden=false;$('bRank').hidden=false}
+  if(await WSRoom.probe()){this.base=WSRoom;this.avail=true;TURN=2;DELAY=2;$('bNet').hidden=false;$('bRank').hidden=false}
  },
  close(){if(this.room){try{this.room.leave()}catch(e){}}this.room=null;this.on=false;if(this.unsub){this.unsub();this.unsub=null}clearTimeout(this.quickT);this.quick=false;if(this.specWs){try{this.specWs.close()}catch(e){}this.specWs=null}this.spec=false},
  esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))},
@@ -112,13 +113,13 @@ const Net={
  peers(ch){
   const P=ch.peers;
   if(!this.on){const h=P.find(p=>p.presence&&p.presence.host&&p.presence.go);if(h&&!this.launched){this.launch(h.presence.go,P)}else this.renderLobby();return}
-  for(const p of P){if(p.sameTab)continue;const s=this.seatOf[p.peer];if(s==null)continue;this.seen[s]=performance.now();const q=p.presence||{};if(typeof q.s==='number')this.sealed[s]=Math.max(this.sealed[s],q.s);if(typeof q.x==='number')this.exd[s]=q.x;if(Array.isArray(q.c))for(const it of q.c){if(Array.isArray(it)&&typeof it[0]==='number'&&it[0]>this.done&&Array.isArray(it[1]))this.inbox[s].set(it[0],it[1])}if(Array.isArray(q.h))this.checkHash(q.h)}
+  for(const p of P){if(p.sameTab)continue;const s=this.seatOf[p.peer];if(s==null)continue;this.seen[s]=performance.now();const q=p.presence||{};if(typeof q.s==='number')this.sealed[s]=Math.max(this.sealed[s],q.s);if(typeof q.x==='number')this.exd[s]=q.x;if(typeof q.r==='number'&&q.r>=0)this.prtt[s]=Math.min(q.r,1500);if(Array.isArray(q.c))for(const it of q.c){if(Array.isArray(it)&&typeof it[0]==='number'&&it[0]>this.done&&Array.isArray(it[1]))this.inbox[s].set(it[0],it[1])}if(Array.isArray(q.h))this.checkHash(q.h)}
  },
  launch(go,P){
   const me=this.room.peers().find(p=>p.sameTab);if(!me)return;
   const seat=go.seats.findIndex(s=>s[0]===me.peer);if(seat<0){$('netW').textContent='이미 진행 중인 경기입니다.';return}
   this.launched=true;this.seatOf={};go.seats.forEach((s,i)=>{this.seatOf[s[0]]=i});
-  const n=go.seats.length;this.n=n;this.sealed=new Array(n).fill(DELAY-1);this.exd=new Array(n).fill(-1);this.inbox=go.seats.map(()=>new Map());this.seen=new Array(n).fill(performance.now());this.done=-1;this.out=[];this.pending=[];this.acc=0;this.hist=new Map();this.alert=0;this.stall=0;this.left=new Set();this.failed=false;this.reported=false;this.spec=false;
+  const n=go.seats.length;this.n=n;this.sealed=new Array(n).fill(DELAY-1);this.prtt=new Array(n).fill(0);this.exd=new Array(n).fill(-1);this.inbox=go.seats.map(()=>new Map());this.seen=new Array(n).fill(performance.now());this.done=-1;this.out=[];this.pending=[];this.acc=0;this.hist=new Map();this.alert=0;this.stall=0;this.left=new Set();this.failed=false;this.reported=false;this.spec=false;
   ME=seat;
   const cfg={players:go.seats.map(s=>({f:s[1],ai:false})),seed:go.seed|0,map:go.map==='duel2'&&go.seats.length===2?'duel2':undefined};
   const raw=new Game(cfg);UI.rec={cfg,cmds:[],net:1};
@@ -132,12 +133,14 @@ const Net={
   const enc=a=>{if(Array.isArray(a))return{u:a.map(x=>x.id)};if(a&&typeof a==='object')return a.id!=null?{e:a.id}:null;if(typeof a==='number')return Math.round(a*10)/10;return a===undefined?null:a};
   this.pending.push([name,...args.map(enc)]);
  },
+ // 내 왕복 시간과 상대 왕복 시간의 절반 합에 여유 45ms를 더해 입력 지연 턴 수를 정한다
+ delayTurns(){if(!this.room.rtt)return DELAY;const v=Math.ceil(((this.room.rtt()+Math.max(0,...this.prtt))/2+45)/(TURN*DT*1000));return Math.max(DELAY,Math.min(10,v))},
  seal(T){
-  const t2=T+DELAY;let size=2,cmds=[];while(this.pending.length){const c=this.pending[0],L=JSON.stringify(c).length+1;if(size+L>2600)break;cmds.push(c);size+=L;this.pending.shift()}
+  const t2=T+this.delayTurns();if(t2<=this.sealed[ME])return;let size=2,cmds=[];while(this.pending.length){const c=this.pending[0],L=JSON.stringify(c).length+1;if(size+L>2600)break;cmds.push(c);size+=L;this.pending.shift()}
   this.sealed[ME]=t2;if(cmds.length)this.out.push([t2,cmds]);this.inbox[ME].set(t2,cmds);
   const low=Math.min(...this.exd.filter((_,i)=>i!==ME));this.out=this.out.filter(x=>x[0]>low);
   let c2=this.out;while(JSON.stringify(c2).length>3300&&c2.length>1)c2=c2.slice(1);
-  this.room.presence({s:t2,x:this.done,c:c2,h:this.lastH||null}).catch(()=>{});
+  this.room.presence({s:t2,x:this.done,c:c2,h:this.lastH||null,r:this.room.rtt?Math.round(this.room.rtt()):null}).catch(()=>{});
  },
  ready(T){if(T<DELAY)return true;for(let s=0;s<this.n;s++){if(s===ME||this.left.has(s))continue;if(this.sealed[s]<T)return false}return true},
  decode(a,seat,own){if(a&&typeof a==='object'){if(Array.isArray(a.u)){const r=[];for(const i of a.u){const x=this.raw.by.get(i);if(x&&!x.dead&&x.p===seat)r.push(x)}return r}if(a.e!=null){const x=this.raw.by.get(a.e);if(own&&(!x||x.p!==seat))return undefined;return x||undefined}return undefined}return a},
@@ -159,7 +162,7 @@ const Net={
   if(this.spec)return this.pumpSpec(dt);
   const g=this.raw;if(g.winner>=0){$('netA').hidden=true;this.report();return}
   this.acc=Math.min(this.acc+dt,.6);let n=0,wait=false;
-  while(this.acc>=DT&&n<8){
+  while(this.acc>=DT&&n<20){
    if(g.tick%TURN===0){const T=g.tick/TURN;if(T>this.done){if(!this.ready(T)){wait=true;break}this.exec(T);this.seal(T)}}
    g.step();this.acc-=DT;n++;
    if(g.tick%150===0){const v=this.hash();this.hist.set(g.tick,v);this.lastH=[g.tick,v];if(this.hist.size>20)this.hist.delete(this.hist.keys().next().value)}

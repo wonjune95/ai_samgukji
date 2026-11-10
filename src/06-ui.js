@@ -149,10 +149,10 @@ const UI={
  frame(now){
   requestAnimationFrame(t=>this.frame(t));
   if(this.hold)return;
-  const dt=Math.min(.1,(now-this.lastT)/1000||0);this.lastT=now;
+  const rawDt=(now-this.lastT)/1000||0,dt=Math.min(.1,rawDt);this.lastT=now;
   const g=this.g;if(!g)return;
   if(this.playing){
-   if(Net.on)Net.pump(dt);else if(!this.paused&&g.winner<0){this.acc+=dt*this.speed;let n=0;while(this.acc>=DT&&n<8){if(Replay.on)Replay.apply();g.step();this.acc-=DT;n++}if(this.mis)Campaign.tick()}
+   if(Net.on)Net.pump(Math.min(.5,rawDt));else if(!this.paused&&g.winner<0){this.acc+=dt*this.speed;let n=0;while(this.acc>=DT&&n<8){if(Replay.on)Replay.apply();g.step();this.acc-=DT;n++}if(this.mis)Campaign.tick()}
    this.panCam(dt);this.drainEvents();
    if(!this.paused&&g.winner<0)AudioFX.musicTick(g.p[ME].fac);
   }else{
