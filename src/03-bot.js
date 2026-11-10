@@ -1,7 +1,7 @@
 class Bot{
  constructor(g,pid,diff){
   this.g=g;this.pid=pid;this.diff=diff;this.state='build';this.wave=0;this.next=0;
-  this.cfg={easy:{base:14,grow:5,minT:360,workers:18,delay:1.5},normal:{base:24,grow:8,minT:270,workers:30,delay:1},hard:{base:28,grow:10,minT:210,workers:36,delay:.8}}[diff]||{};
+  this.cfg={easy:{base:10,grow:3,minT:540,workers:12,delay:2.2,prod:.03,maxBar:1},normal:{base:20,grow:6,minT:420,workers:30,delay:1,prod:1,maxBar:6},hard:{base:28,grow:10,minT:300,workers:36,delay:.9,prod:1,maxBar:6}}[diff]||{};
   this.rush=[];this.startArmy=0;this.fac=g.p[pid].fac;
  }
  role(r){return this.fac+'_'+r}
@@ -44,13 +44,13 @@ class Bot{
   else if(count('tech')<1&&has('bar')&&t>95*delay)this.tryBuild('tech');
   else if(count('adv')<1&&has('tech')&&t>190*delay)this.tryBuild('adv');
   else if(count('aura')<1&&has('bar')&&t>250*delay&&p.c>160)this.tryBuild('aura');
-  else if(count('bar')<2&&t>150*delay)this.tryBuild('bar');
+  else if(count('bar')<Math.min(2,this.cfg.maxBar)&&t>150*delay)this.tryBuild('bar');
   else if(count('twr')<1&&t>190*delay)this.tryBuild('twr');
-  else if(count('bar')<3&&t>300*delay)this.tryBuild('bar');
+  else if(count('bar')<Math.min(3,this.cfg.maxBar)&&t>300*delay)this.tryBuild('bar');
   else if(hqs.length<2&&t>250*delay&&count('hq')<2)this.expand();
   else if(hqs.length<3&&t>640*delay&&count('hq')<3)this.expand();
-  else if(count('bar')<4&&t>480*delay)this.tryBuild('bar');
-  if(p.c>520&&count('bar')<6&&bs.filter(x=>!x.built&&x.def.role==='bar').length+workers.filter(w=>w.o&&w.o.t==='build'&&BLD[w.o.key].role==='bar').length<1)this.tryBuild('bar');
+  else if(count('bar')<Math.min(4,this.cfg.maxBar)&&t>480*delay)this.tryBuild('bar');
+  if(p.c>520&&count('bar')<Math.min(6,this.cfg.maxBar)&&bs.filter(x=>!x.built&&x.def.role==='bar').length+workers.filter(w=>w.o&&w.o.t==='build'&&BLD[w.o.key].role==='bar').length<1)this.tryBuild('bar');
   // 연구
   for(const b of techs){if(b.q.length||t<=200*delay)continue;if(g.research(b,'atk')!=='ok'&&t>320*delay)g.research(b,'arm')}
   // 생산
@@ -109,7 +109,7 @@ class Bot{
   let ea=0,ev2=0;for(const u of g.units){if(!g.hostile(this.pid,u.p)||u.def.worker)continue;const v=u.def.c+u.def.d*1.5;ev2+=v;if(u.air)ev2,ea+=v}
   const antiAir=ev2>0&&ea/ev2>.32;
   bars.forEach((b,i)=>{
-   if(b.q.length>=1)return;
+   if(b.q.length>=1||g.rng()>this.cfg.prod)return;
    let order;
    if(this.fac==='gpt')order=hasAdv?['gpt_tf','gpt_lance','gpt_arch','gpt_guard']:hasTech?['gpt_lance','gpt_arch','gpt_guard']:['gpt_guard'];
    if(this.fac==='cla')order=hasAdv?['cla_beast','cla_spore','cla_spine','cla_swarm']:hasTech?['cla_acid','cla_spine','cla_swarm']:['cla_swarm'];
@@ -126,7 +126,7 @@ class Bot{
    for(const k of seq){if(g.train(b,k)==='ok')break}
   });
   for(const b of this.ctx.advs){
-   if(b.q.length>=1)continue;const A={gpt:[['gpt_ship','gpt_ark'],'gpt_wing'],gem:[['gem_mech','gem_bomb'],'gem_aa'],cla:[['cla_brood','cla_wing'],'cla_leech']}[this.fac];
+   if(b.q.length>=1||g.rng()>this.cfg.prod)continue;const A={gpt:[['gpt_ship','gpt_ark'],'gpt_wing'],gem:[['gem_mech','gem_bomb'],'gem_aa'],cla:[['cla_brood','cla_wing'],'cla_leech']}[this.fac];
    const ea2=g.units.filter(u=>u.air&&g.hostile(this.pid,u.p)).length;let order=A[0].slice();if(antiAir||ea2>3)order=[A[1],...order];if(g.rng()<.5)order.reverse();
    for(const k of order){if(g.train(b,k)==='ok')break}
   }

@@ -10,7 +10,7 @@ class Game{
   this.o=o;this.rng=mulberry(o.seed||7);this.tick=0;this.nid=1;
   this.blocked=new Uint8Array(N);this.units=[];this.blds=[];this.res=[];this.proj=[];this.fx=[];this.delayed=[];this.by=new Map();
   this.fields=new Map();this.navV=1;this.fieldBudget=0;this.hash=[];for(let i=0;i<HW*HH;i++)this.hash.push([]);
-  const mk=(id,f,ai,diff)=>({id,fac:f,ai,diff,c:75,d:0,supUsed:0,supCap:0,atk:0,arm:0,out:false,abilCd:0,income:diff==='hard'?1.25:diff==='easy'?.85:1,color:FAC[f].color,ctx:null,ctxV:0,stats:{made:0,lost:0,killed:0,gathered:0},alive:true});
+  const mk=(id,f,ai,diff)=>({id,fac:f,ai,diff,c:75,d:0,supUsed:0,supCap:0,atk:0,arm:0,out:false,abilCd:0,income:!ai?1:diff==='hard'?1:diff==='easy'?.7:.85,color:FAC[f].color,ctx:null,ctxV:0,stats:{made:0,lost:0,killed:0,gathered:0},alive:true});
   const list=o.players||[{f:o.f0,ai:o.ai0,d:o.d0},{f:o.f1,ai:o.ai1,d:o.d1}];
   this.p=list.map((q,i)=>mk(i,q.f,!!q.ai,q.d||'normal'));
   this.p.forEach((q,i)=>{if(this.p.slice(0,i).some(x=>x.fac===q.fac))q.color=ALT_COLOR});

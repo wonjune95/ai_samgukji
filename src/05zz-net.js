@@ -1,7 +1,7 @@
 // 온라인 대전: 게시 페이지의 room 기능 위에서 명령만 주고받는 락스텝 동기화
 // TURN·DELAY: 자체 서버 연결에서는 Net.init이 더 짧은 값으로 바꾸고, 입력 지연은 왕복 시간에 맞춰 DELAY 이상으로 조절한다(claude.ai room은 전송 빈도 제한을 알 수 없어 기본값 고정)
 let TURN=6,DELAY=3;
-const NET_V='aisg13',NET_CMDS=new Set(['cmdMove','cmdPatrol','cmdAttack','cmdHold','cmdStop','cmdGather','cmdRepair','cmdSkill','cmdBuild','train','research','cancelQ','cancelBuild','setMode','castAbility','propose','betray','concede','setRally']);
+const NET_V='aisg14',NET_CMDS=new Set(['cmdMove','cmdPatrol','cmdAttack','cmdHold','cmdStop','cmdGather','cmdRepair','cmdSkill','cmdBuild','train','research','cancelQ','cancelBuild','setMode','castAbility','propose','betray','concede','setRally']);
 const NET_RET={train:'ok',research:'ok',castAbility:true,propose:'ok',cmdBuild:true};
 // 온라인 명령·공유 리플레이의 인수 검증(둘 다 신뢰하지 않는 입력)
 const cmdOk=(name,a)=>!((name==='train'&&!Object.prototype.hasOwnProperty.call(UNIT,a[1]))||(name==='cmdBuild'&&!Object.prototype.hasOwnProperty.call(BLD,a[1]))||(name==='setMode'&&!['inf','mech','air'].includes(a[1]))||(name==='research'&&!['atk','arm'].includes(a[1]))||(name==='setRally'&&a[0].length===0));
@@ -48,7 +48,9 @@ const Net={
  },
  close(){if(this.room){try{this.room.leave()}catch(e){}}this.room=null;this.on=false;if(this.unsub){this.unsub();this.unsub=null}clearTimeout(this.quickT);this.quick=false;if(this.specWs){try{this.specWs.close()}catch(e){}this.specWs=null}this.spec=false},
  esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))},
- open(){$('net').hidden=false;$('netL').hidden=false;$('netR').hidden=true;$('netE').textContent='';$('netC').value='';const srv=this.base===WSRoom;$('netNB').hidden=!srv;$('netQB').hidden=!srv;$('netRooms').hidden=!srv;$('netN').value=Ident.nick();if(srv){clearInterval(this.pollT);this.loadRooms();this.pollT=setInterval(()=>this.loadRooms(),3000)}},
+ renderFac(){const w=$('netF');w.textContent='';for(const k of ['gpt','gem','cla']){const b=document.createElement('button');b.type='button';b.textContent=FAC[k].name;b.style.setProperty('--fc',FAC[k].color);b.setAttribute('role','radio');b.setAttribute('aria-checked',UI.setup.fac===k);b.onclick=()=>{UI.setup.fac=k;this.setFac();UI.refreshTitle();AudioFX.play('ui');this.renderFac()};w.appendChild(b)}},
+ closeBtn(){if(this.room&&!this.on){this.close();this.open()}else this.hide()},
+ open(){this.renderFac();$('netH').textContent='온라인 대전';$('netX').textContent='닫기';$('net').hidden=false;$('netL').hidden=false;$('netR').hidden=true;$('netE').textContent='';$('netC').value='';const srv=this.base===WSRoom;$('netNB').hidden=!srv;$('netQB').hidden=!srv;$('netRooms').hidden=!srv;$('netN').value=Ident.nick();if(srv){clearInterval(this.pollT);this.loadRooms();this.pollT=setInterval(()=>this.loadRooms(),3000)}},
  hide(){$('net').hidden=true;clearInterval(this.pollT);if(!this.on)this.close()},
  async loadRooms(){if($('net').hidden||$('netL').hidden)return;try{const r=await fetch('/api/rooms?v='+NET_V);if(r.ok)this.renderRooms(await r.json())}catch(e){}},
  renderRooms(o){
@@ -95,7 +97,7 @@ const Net={
  async enter(code,host,opts={}){
   code=String(code||'').trim().toLowerCase();if(!/^[a-z0-9]{3,8}$/.test(code)){$('netE').textContent='방 코드를 확인하십시오.';return}
   this.saveNick();try{this.close();this.room=await this.base.join('aisg-'+code)}catch(e){$('netE').textContent='방에 들어갈 수 없습니다. 잠시 후 다시 시도하십시오.';return}
-  this.code=code;this.isHost=!!host;this.launched=false;this.quick=!!opts.quick;this.going=false;this.spec=false;clearInterval(this.pollT);$('netL').hidden=true;$('netR').hidden=false;$('netCode').textContent=code.toUpperCase();
+  this.code=code;this.isHost=!!host;this.launched=false;this.quick=!!opts.quick;this.going=false;this.spec=false;clearInterval(this.pollT);$('netL').hidden=true;$('netR').hidden=false;$('netCode').textContent=code.toUpperCase();$('netH').textContent='대기실';$('netX').textContent='방 나가기';$('netT').textContent=opts.quick?'· 빠른 대전':opts.pub?'· 공개 방':'· 비공개 방';
   this.room.presence({v:NET_V,fac:UI.setup.fac,host:host?1:0,pub:opts.pub?1:0,nick:Ident.nick()});
   this.unsub=this.room.onPeers(ch=>this.peers(ch),()=>{$('netE').textContent='연결이 끊어졌습니다.'});
   this.renderLobby();
@@ -105,7 +107,8 @@ const Net={
  order(){const L=this.lobby().slice();L.sort((a,b)=>(b.presence.host?1:0)-(a.presence.host?1:0)||(a.peer<b.peer?-1:1));return L},
  renderLobby(){
   if(this.on||!this.room)return;const L=this.order(),w=$('netP');w.textContent='';
-  L.forEach((p,i)=>{const d=document.createElement('div');d.className='npl';const f=FAC[p.presence.fac]?p.presence.fac:'gpt';d.style.color=FAC[f].color;d.textContent=(p.presence.nick?String(p.presence.nick).slice(0,12):'플레이어 '+(i+1))+(p.sameTab?' (나)':'')+(p.presence.host?' · 방장':'')+' — '+FAC[f].name;w.appendChild(d)});
+  L.forEach((p,i)=>{const d=document.createElement('div');d.className='npl'+(p.sameTab?' me':'');const f=FAC[p.presence.fac]?p.presence.fac:'gpt';d.style.color=FAC[f].color;d.textContent=(p.presence.nick?String(p.presence.nick).slice(0,12):'플레이어 '+(i+1))+(p.sameTab?' (나)':'')+(p.presence.host?' · 방장':'')+' — '+FAC[f].name;w.appendChild(d)});
+  for(let i=L.length;i<(this.quick?2:3);i++){const d=document.createElement('div');d.className='npl off';d.textContent='빈 자리';w.appendChild(d)}
   const b=$('netGo');b.hidden=!this.isHost||this.quick;b.disabled=L.length<2||L.length>3;$('netW').textContent=this.quick?'상대를 찾는 중입니다. 찾으면 자동으로 출진합니다.':this.isHost?(L.length<2?'다른 플레이어를 기다리는 중입니다.':L.length>3?'최대 3명까지 참가할 수 있습니다.':'출진할 수 있습니다.'):'방장의 출진을 기다리는 중입니다.';
   if(this.quick&&this.isHost&&L.length>=2&&!this.going){this.going=true;setTimeout(()=>this.go(),300)}
  },
